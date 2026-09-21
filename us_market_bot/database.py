@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import contextmanager
 import json
 from dataclasses import asdict
 from datetime import datetime
@@ -183,8 +184,14 @@ class MarketDatabase:
             ),
         )
 
-    def _connect(self) -> sqlite3.Connection:
-        return sqlite3.connect(self.path)
+    @contextmanager
+    def _connect(self):
+        connection = sqlite3.connect(self.path, timeout=30)
+        try:
+            with connection:
+                yield connection
+        finally:
+            connection.close()
 
 
 def normalize_symbol(value: str) -> str:

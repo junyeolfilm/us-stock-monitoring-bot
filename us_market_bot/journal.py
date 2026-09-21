@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import hashlib
 import json
 import sqlite3
+from contextlib import contextmanager
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS research_editions (
@@ -35,10 +36,15 @@ class Journal:
         with self.connect() as c:
             c.executescript(SCHEMA)
 
+    @contextmanager
     def connect(self):
         conn = sqlite3.connect(self.path, timeout=30)
         conn.row_factory = sqlite3.Row
-        return conn
+        try:
+            with conn:
+                yield conn
+        finally:
+            conn.close()
 
     def save(self, kind, day, asof, body, payload, *, preview=False):
         edition_id = f"{kind}:{day}"
