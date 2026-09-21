@@ -48,7 +48,7 @@ $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" 
 Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
 Stop-USMarketBot
 try {
-    Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Description "Daily US market briefing Discord bot" -Force -ErrorAction Stop | Out-Null
+    Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Description "Daily US and Korean market briefing Discord bot" -Force -ErrorAction Stop | Out-Null
     Remove-Item -LiteralPath $startupFile -Force -ErrorAction SilentlyContinue
     Start-ScheduledTask -TaskName $taskName
     Write-Host "installed scheduled task: $taskName"
@@ -60,4 +60,3 @@ try {
     Write-Host "installed startup fallback: $startupFile"
 }
 Write-Host "runtime: $project"
-

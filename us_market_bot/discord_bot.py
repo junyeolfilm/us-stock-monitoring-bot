@@ -4,7 +4,7 @@ import argparse
 import asyncio
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import discord
 from discord import app_commands
@@ -18,7 +18,9 @@ from us_market_bot.service import BriefingService
 
 
 log = logging.getLogger("us-market-bot")
-LAST_REPORT_DATE = "last_discord_report_date"
+LAST_US_REPORT_DATE = "last_discord_report_date"
+LAST_DOMESTIC_REPORT_DATE = "last_domestic_report_date"
+LAST_DOMESTIC_ATTEMPT_DATE = "last_domestic_attempt_date"
 
 
 class USMarketBot(commands.Bot):
@@ -27,11 +29,13 @@ class USMarketBot(commands.Bot):
         self.settings = settings
         self.database = MarketDatabase(settings.database_path)
         self.service = BriefingService(settings, self.database)
+        self.domestic_retry_after: datetime | None = None
 
     async def setup_hook(self) -> None:
         self.database.initialize()
         await self.tree.sync()
         self.daily_briefing.start()
+        self.domestic_briefing.start()
 
     async def on_ready(self) -> None:
         if self.user and self.settings.discord_bot_name and self.user.name != self.settings.discord_bot_name:
@@ -44,6 +48,7 @@ class USMarketBot(commands.Bot):
 
     async def close(self) -> None:
         self.daily_briefing.cancel()
+        self.domestic_briefing.cancel()
         await super().close()
 
     async def channel(self) -> discord.abc.Messageable:
@@ -60,7 +65,17 @@ class USMarketBot(commands.Bot):
         for chunk in split_report(body):
             await channel.send(chunk, suppress_embeds=True)
         today = datetime.now(self.settings.timezone).date().isoformat()
-        self.database.set_state(LAST_REPORT_DATE, today)
+        self.database.set_state(LAST_US_REPORT_DATE, today)
+        return body
+
+    async def post_domestic_briefing(self, *, require_today: bool = False) -> str:
+        market_date, body = await asyncio.to_thread(
+            self.service.generate_domestic, require_today=require_today
+        )
+        channel = await self.channel()
+        for chunk in split_report(body):
+            await channel.send(chunk, suppress_embeds=True)
+        self.database.set_state(LAST_DOMESTIC_REPORT_DATE, market_date)
         return body
 
     @tasks.loop(minutes=1)
@@ -69,7 +84,7 @@ class USMarketBot(commands.Bot):
         if now.hour != self.settings.report_hour or now.minute < self.settings.report_minute:
             return
         today = now.date().isoformat()
-        if self.database.get_state(LAST_REPORT_DATE) == today:
+        if self.database.get_state(LAST_US_REPORT_DATE) == today:
             return
         try:
             await self.post_briefing()
@@ -80,17 +95,50 @@ class USMarketBot(commands.Bot):
     async def before_daily_briefing(self) -> None:
         await self.wait_until_ready()
 
+    @tasks.loop(minutes=1)
+    async def domestic_briefing(self) -> None:
+        now = datetime.now(self.settings.timezone)
+        if now.weekday() >= 5:
+            return
+        scheduled = (self.settings.domestic_report_hour, self.settings.domestic_report_minute)
+        if (now.hour, now.minute) < scheduled:
+            return
+        today = now.date().isoformat()
+        if self.database.get_state(LAST_DOMESTIC_REPORT_DATE) == today:
+            return
+        if self.database.get_state(LAST_DOMESTIC_ATTEMPT_DATE) == today:
+            return
+        if self.domestic_retry_after and now < self.domestic_retry_after:
+            return
+        try:
+            await self.post_domestic_briefing(require_today=True)
+            self.domestic_retry_after = None
+        except ValueError as exc:
+            self.database.set_state(LAST_DOMESTIC_ATTEMPT_DATE, today)
+            log.info("국내장 브리핑 생략: %s", exc)
+        except (MarketDataError, discord.DiscordException, RuntimeError) as exc:
+            self.domestic_retry_after = now + timedelta(minutes=30)
+            log.error("국내장 브리핑 실패(30분 뒤 재시도): %s", exc)
+
+    @domestic_briefing.before_loop
+    async def before_domestic_briefing(self) -> None:
+        await self.wait_until_ready()
+
 
 settings = Settings.from_env()
 bot = USMarketBot(settings)
 
 
-@bot.tree.command(name="상태", description="미국 주식 동향 봇의 상태를 확인합니다")
+@bot.tree.command(name="상태", description="한미 주식 동향 봇의 상태를 확인합니다")
 async def status(interaction: discord.Interaction) -> None:
-    last_date = bot.database.get_state(LAST_REPORT_DATE) or "아직 없음"
+    last_us = bot.database.get_state(LAST_US_REPORT_DATE) or "아직 없음"
+    last_domestic = bot.database.get_state(LAST_DOMESTIC_REPORT_DATE) or "아직 없음"
     await interaction.response.send_message(
-        f"정상 작동 중입니다.\n정기 브리핑: 매일 {bot.settings.report_hour:02d}:{bot.settings.report_minute:02d} "
-        f"({bot.settings.timezone.key})\n최근 발송일: {last_date}",
+        f"정상 작동 중입니다.\n"
+        f"미국장 브리핑: 매일 {bot.settings.report_hour:02d}:{bot.settings.report_minute:02d}\n"
+        f"국내장 마감 브리핑: 평일 {bot.settings.domestic_report_hour:02d}:"
+        f"{bot.settings.domestic_report_minute:02d} ({bot.settings.timezone.key})\n"
+        f"최근 미국장 발송: {last_us}\n최근 국내장 발송: {last_domestic}",
         ephemeral=True,
     )
 
@@ -107,6 +155,22 @@ async def latest_briefing(interaction: discord.Interaction) -> None:
         await interaction.followup.send(chunk, ephemeral=True, suppress_embeds=True)
 
 
+@bot.tree.command(name="국내장브리핑", description="가장 최근 국내장 마감 브리핑을 확인합니다")
+async def latest_domestic_briefing(interaction: discord.Interaction) -> None:
+    body = bot.database.latest_domestic_report()
+    if body is None:
+        await interaction.response.send_message(
+            "아직 생성된 국내장 브리핑이 없습니다.", ephemeral=True
+        )
+        return
+    chunks = split_report(body)
+    await interaction.response.send_message(
+        chunks[0], ephemeral=True, suppress_embeds=True
+    )
+    for chunk in chunks[1:]:
+        await interaction.followup.send(chunk, ephemeral=True, suppress_embeds=True)
+
+
 @bot.tree.command(name="지금브리핑", description="미국 시장 브리핑을 지금 생성해 채널에 보냅니다")
 @app_commands.default_permissions(manage_guild=True)
 async def briefing_now(interaction: discord.Interaction) -> None:
@@ -117,6 +181,22 @@ async def briefing_now(interaction: discord.Interaction) -> None:
         await interaction.followup.send(f"브리핑을 만들지 못했습니다: {exc}", ephemeral=True)
         return
     await interaction.followup.send("브리핑을 채널에 전송했습니다.", ephemeral=True)
+
+
+@bot.tree.command(name="지금국내장", description="최근 국내장 마감 브리핑을 생성해 채널에 보냅니다")
+@app_commands.default_permissions(manage_guild=True)
+async def domestic_briefing_now(interaction: discord.Interaction) -> None:
+    await interaction.response.defer(ephemeral=True, thinking=True)
+    try:
+        await bot.post_domestic_briefing(require_today=False)
+    except (MarketDataError, discord.DiscordException, RuntimeError, ValueError) as exc:
+        await interaction.followup.send(
+            f"국내장 브리핑을 만들지 못했습니다: {exc}", ephemeral=True
+        )
+        return
+    await interaction.followup.send(
+        "최근 국내장 마감 브리핑을 채널에 전송했습니다.", ephemeral=True
+    )
 
 
 @bot.tree.command(name="관심종목", description="현재 고정 관심 종목을 확인합니다")
@@ -158,6 +238,7 @@ async def criteria(interaction: discord.Interaction) -> None:
     await interaction.response.send_message(
         "화제 종목은 등락률·거래량 순위·뉴스 수·관심 종목 여부를 합산해 선정합니다.\n"
         "국내 영향 후보는 미국 업종 신호와 뉴스 키워드가 사전 검토된 연결표에 일치할 때만 표시합니다.\n"
+        "국내장 예상 시나리오는 미국 주요 ETF의 가중 신호와 전일 국내장 지수·거래대금 상위를 함께 참고합니다.\n"
         "결과는 매수·매도 추천이나 확정적인 가격 예측이 아닙니다.",
         ephemeral=True,
     )
@@ -186,4 +267,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

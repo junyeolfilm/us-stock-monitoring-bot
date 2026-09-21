@@ -66,3 +66,33 @@ class DomesticCandidate:
     triggers: tuple[str, ...]
     rationale: str
 
+
+@dataclass(frozen=True)
+class DomesticIndexMove:
+    symbol: str
+    name: str
+    price: float
+    change_percent: float
+    market_status: str
+
+
+@dataclass(frozen=True)
+class DomesticStockMove:
+    code: str
+    name: str
+    market: str
+    price: float
+    change_percent: float
+    volume: int
+    trading_value: int
+    url: str
+
+
+@dataclass(frozen=True)
+class DomesticSnapshot:
+    market_date: str
+    collected_at: datetime
+    indices: tuple[DomesticIndexMove, ...]
+    gainers: tuple[DomesticStockMove, ...]
+    losers: tuple[DomesticStockMove, ...]
+    value_leaders: tuple[DomesticStockMove, ...]

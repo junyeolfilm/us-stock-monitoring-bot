@@ -45,6 +45,8 @@ class Settings:
     database_path: Path
     report_hour: int
     report_minute: int
+    domestic_report_hour: int
+    domestic_report_minute: int
     timezone: ZoneInfo
 
     @classmethod
@@ -62,6 +64,12 @@ class Settings:
             database_path=Path(os.environ.get("US_MARKET_DB", "data/us_market.db")),
             report_hour=max(0, min(23, _integer("US_MARKET_REPORT_HOUR", 8))),
             report_minute=max(0, min(59, _integer("US_MARKET_REPORT_MINUTE", 0))),
+            domestic_report_hour=max(
+                0, min(23, _integer("KR_MARKET_REPORT_HOUR", 15))
+            ),
+            domestic_report_minute=max(
+                0, min(59, _integer("KR_MARKET_REPORT_MINUTE", 35))
+            ),
             timezone=ZoneInfo(timezone_name),
         )
 
@@ -78,4 +86,3 @@ class Settings:
                 }
             )
         return tuple(name for name, value in values.items() if not value)
-
