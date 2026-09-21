@@ -8,7 +8,8 @@ $startupFile = Join-Path ([Environment]::GetFolderPath("Startup")) "USStockMonit
 
 function Stop-USMarketBot {
     Get-CimInstance Win32_Process | Where-Object {
-        $_.CommandLine -like "*us-stock-monitoring-bot*run_discord_bot.ps1*"
+        $_.CommandLine -like "*us-stock-monitoring-bot*run_discord_bot.ps1*" -or
+        $_.CommandLine -like "*us_market_bot.discord_bot*"
     } | ForEach-Object {
         Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
     }
