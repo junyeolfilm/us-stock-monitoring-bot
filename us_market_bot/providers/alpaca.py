@@ -61,7 +61,9 @@ class AlpacaMarketData:
             news=self.news(tuple(sorted(dynamic_symbols)), hours=30, limit=50),
         )
 
-    def movers(self, *, top: int = 20) -> tuple[tuple[MarketMover, ...], tuple[MarketMover, ...]]:
+    def movers(
+        self, *, top: int = 20
+    ) -> tuple[tuple[MarketMover, ...], tuple[MarketMover, ...]]:
         payload = self._get(
             "/v1beta1/screener/stocks/movers", {"top": max(1, min(top, 50))}
         )
@@ -102,7 +104,9 @@ class AlpacaMarketData:
             if not close or not previous_close:
                 continue
             change = ((close / previous_close) - 1.0) * 100
-            output.append(BenchmarkMove(symbol=symbol, price=close, change_percent=change))
+            output.append(
+                BenchmarkMove(symbol=symbol, price=close, change_percent=change)
+            )
         return tuple(output)
 
     def news(
@@ -126,6 +130,15 @@ class AlpacaMarketData:
         return tuple(self._parse_news(item) for item in values if item.get("headline"))
 
     def _get(self, path: str, params: dict[str, Any]) -> dict[str, Any]:
+        allowed = {
+            "/v2/stocks/bars",
+            "/v2/stocks/snapshots",
+            "/v1beta1/news",
+            "/v1beta1/screener/stocks/movers",
+            "/v1beta1/screener/stocks/most-actives",
+        }
+        if path not in allowed or self.base_url != "https://data.alpaca.markets":
+            raise MarketDataError("브리핑 전용 읽기 허용목록 밖의 API 요청 차단")
         try:
             response = self.session.get(
                 f"{self.base_url}{path}", params=params, timeout=(5, 20)
@@ -133,7 +146,9 @@ class AlpacaMarketData:
         except requests.RequestException as exc:
             raise MarketDataError(f"Alpaca 연결 실패: {exc}") from exc
         if response.status_code == 429:
-            raise MarketDataError("Alpaca 요청 제한에 도달했습니다. 잠시 후 다시 시도하세요.")
+            raise MarketDataError(
+                "Alpaca 요청 제한에 도달했습니다. 잠시 후 다시 시도하세요."
+            )
         if response.status_code in {401, 403}:
             raise MarketDataError("Alpaca 인증 또는 데이터 이용 권한을 확인하세요.")
         try:
@@ -185,4 +200,3 @@ def _integer(value: Any) -> int:
         return int(value)
     except (TypeError, ValueError):
         return 0
-

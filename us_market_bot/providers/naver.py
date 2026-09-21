@@ -118,9 +118,7 @@ class NaverDomesticMarketData:
         )
 
     @classmethod
-    def _parse_stock(
-        cls, item: dict[str, Any], market: str
-    ) -> DomesticStockMove:
+    def _parse_stock(cls, item: dict[str, Any], market: str) -> DomesticStockMove:
         code = str(item.get("itemCode", ""))
         return DomesticStockMove(
             code=code,
@@ -129,13 +127,13 @@ class NaverDomesticMarketData:
             price=cls._number(item.get("closePriceRaw", item.get("closePrice"))),
             change_percent=cls._number(item.get("fluctuationsRatio")),
             volume=cls._integer(
-                item.get("accumulatedTradingVolumeRaw", item.get("accumulatedTradingVolume"))
+                item.get(
+                    "accumulatedTradingVolumeRaw", item.get("accumulatedTradingVolume")
+                )
             ),
             trading_value=cls._integer(item.get("accumulatedTradingValueRaw")),
             url=str(
-                item.get(
-                    "newPcUrl", f"https://stock.naver.com/domestic/stock/{code}"
-                )
+                item.get("newPcUrl", f"https://stock.naver.com/domestic/stock/{code}")
             ),
         )
 

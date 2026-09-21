@@ -1,0 +1,15 @@
+{
+  "markets": [],
+  "broker": null,
+  "currency": null,
+  "available_cash": null,
+  "per_symbol_limit": null,
+  "loss_budget": null,
+  "sector_limit": null,
+  "horizon": null,
+  "holdings": null,
+  "open_orders": null,
+  "account_asof": null,
+  "costs": null,
+  "broker_rules": null
+}

@@ -40,6 +40,9 @@ if (-not (Test-Path $python)) {
 }
 
 & $python -m pip install --disable-pip-version-check -q -r (Join-Path $project "requirements.txt")
+if ($LASTEXITCODE -ne 0) { throw "Dependency install failed; existing bot was not stopped." }
+& $python -m compileall -q (Join-Path $project "us_market_bot")
+if ($LASTEXITCODE -ne 0) { throw "Code validation failed; existing bot was not stopped." }
 
 $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$runner`"" -WorkingDirectory $project
 $trigger = New-ScheduledTaskTrigger -AtLogOn

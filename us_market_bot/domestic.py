@@ -74,7 +74,9 @@ def domestic_candidates(
     limit: int = 5,
 ) -> tuple[DomesticCandidate, ...]:
     hot_by_symbol = {item.symbol: item for item in hot_stocks}
-    benchmark_by_symbol = {item.symbol: item.change_percent for item in snapshot.benchmarks}
+    benchmark_by_symbol = {
+        item.symbol: item.change_percent for item in snapshot.benchmarks
+    }
     headlines = " ".join(item.headline.casefold() for item in snapshot.news)
     candidates: list[tuple[float, DomesticCandidate]] = []
 
@@ -86,7 +88,9 @@ def domestic_candidates(
             if abs(benchmark_by_symbol.get(symbol, 0.0)) >= 0.8
         ]
         keyword_hits = [keyword for keyword in rule.keywords if keyword in headlines]
-        triggers = tuple(dict.fromkeys((*symbol_hits, *benchmark_hits, *keyword_hits[:2])))
+        triggers = tuple(
+            dict.fromkeys((*symbol_hits, *benchmark_hits, *keyword_hits[:2]))
+        )
         if not triggers:
             continue
 
@@ -104,7 +108,9 @@ def domestic_candidates(
         else:
             outlook = "변동성 확대 가능성"
 
-        evidence_points = len(symbol_hits) + len(benchmark_hits) + min(len(keyword_hits), 2)
+        evidence_points = (
+            len(symbol_hits) + len(benchmark_hits) + min(len(keyword_hits), 2)
+        )
         confidence = "높음" if evidence_points >= 3 else "보통"
         score = evidence_points * 10 + abs(average)
         candidates.append(
@@ -123,4 +129,3 @@ def domestic_candidates(
 
     candidates.sort(key=lambda item: (-item[0], item[1].sector))
     return tuple(item[1] for item in candidates[: max(1, limit)])
-

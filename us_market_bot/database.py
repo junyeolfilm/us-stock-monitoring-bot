@@ -45,7 +45,9 @@ class MarketDatabase:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as connection:
             connection.executescript(SCHEMA)
-            count = int(connection.execute("SELECT COUNT(*) FROM watchlist").fetchone()[0])
+            count = int(
+                connection.execute("SELECT COUNT(*) FROM watchlist").fetchone()[0]
+            )
             if count == 0:
                 now = datetime.now().astimezone().isoformat(timespec="seconds")
                 connection.executemany(
@@ -121,9 +123,9 @@ class MarketDatabase:
         payload = json.dumps(
             asdict(snapshot),
             ensure_ascii=False,
-            default=lambda value: value.isoformat()
-            if isinstance(value, datetime)
-            else str(value),
+            default=lambda value: (
+                value.isoformat() if isinstance(value, datetime) else str(value)
+            ),
         )
         with self._connect() as connection:
             connection.execute(

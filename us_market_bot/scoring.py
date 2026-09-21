@@ -61,4 +61,3 @@ def rank_hot_stocks(
 
     ranked.sort(key=lambda item: (-item.heat_score, item.symbol))
     return tuple(ranked[: max(1, limit)])
-

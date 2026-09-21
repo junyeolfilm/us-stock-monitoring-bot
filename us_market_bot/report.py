@@ -47,9 +47,15 @@ def build_report(
     lines.extend(("", "**오늘의 화제 종목**"))
     if hot:
         for item in hot[:8]:
-            change = "등락 확인 중" if item.change_percent is None else f"{item.change_percent:+.2f}%"
+            change = (
+                "등락 확인 중"
+                if item.change_percent is None
+                else f"{item.change_percent:+.2f}%"
+            )
             reasons = " · ".join(item.reasons[:3])
-            lines.append(f"• **{item.symbol}** `{change}` · Heat {item.heat_score:.0f} · {reasons}")
+            lines.append(
+                f"• **{item.symbol}** `{change}` · Heat {item.heat_score:.0f} · {reasons}"
+            )
     else:
         lines.append("• 기준을 충족한 화제 종목이 없습니다.")
 
@@ -140,7 +146,13 @@ def split_report(body: str, *, limit: int = 1900) -> tuple[str, ...]:
     chunks: list[str] = []
     current: list[str] = []
     current_length = 0
-    for line in body.splitlines():
+    # Discord's limit also applies to a single long line (e.g. an external URL).
+    lines = [
+        part
+        for line in body.splitlines()
+        for part in ([line[i : i + limit] for i in range(0, len(line), limit)] or [""])
+    ]
+    for line in lines:
         added = len(line) + 1
         if current and current_length + added > limit:
             chunks.append("\n".join(current))
@@ -194,11 +206,11 @@ def _domestic_forecast_lines(
         + changes.get("IWM", 0.0) * 0.10
     )
     signals = [
-        changes[symbol]
-        for symbol in ("SPY", "QQQ", "SMH", "IWM")
-        if symbol in changes
+        changes[symbol] for symbol in ("SPY", "QQQ", "SMH", "IWM") if symbol in changes
     ]
-    agreement = sum(value > 0 for value in signals) - sum(value < 0 for value in signals)
+    agreement = sum(value > 0 for value in signals) - sum(
+        value < 0 for value in signals
+    )
     if weighted >= 0.6:
         scenario = "상승 우세"
     elif weighted <= -0.6:
@@ -229,11 +241,11 @@ def _domestic_forecast_lines(
             if name in prior_names
         ]
         if overlaps:
-            output.append(
-                "• 연속 관찰 후보: " + ", ".join(dict.fromkeys(overlaps))
-            )
+            output.append("• 연속 관찰 후보: " + ", ".join(dict.fromkeys(overlaps)))
     else:
-        output.append("• 저장된 전일 국내장 마감 자료가 없어 미국장 신호만 반영했습니다.")
+        output.append(
+            "• 저장된 전일 국내장 마감 자료가 없어 미국장 신호만 반영했습니다."
+        )
 
     sectors = ", ".join(item.sector for item in candidates[:3])
     if sectors:
